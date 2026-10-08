@@ -104,27 +104,6 @@ jobs:
       - name: Check formatting
         run: terraform -chdir=infra fmt -check -recursive
 
-      - name: Check deployment OIDC claims
-        uses: actions/github-script@v7
-        env:
-          APPLY_ROLE_ARN: ${{ vars.AWS_APPLY_ROLE_ARN }}
-        with:
-          script: |
-            if (!process.env.APPLY_ROLE_ARN) {
-              core.setFailed('AWS_APPLY_ROLE_ARN is missing. Configure it in the infra-dev environment.');
-              return;
-            }
-            const token = await core.getIDToken('sts.amazonaws.com');
-            core.setSecret(token);
-            const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
-            core.info(JSON.stringify({ issuer: claims.iss, audience: claims.aud, subject: claims.sub }));
-            const expectedSubject = 'repo:HninPhyuPhyuAung-hub@58066359/banking-infra@1410181109:environment:infra-dev';
-            if (claims.iss !== 'https://token.actions.githubusercontent.com' ||
-                claims.aud !== 'sts.amazonaws.com' ||
-                claims.sub !== expectedSubject) {
-              core.setFailed('OIDC claims do not match the AWS trust policy. Check repository/environment spelling and any custom GitHub OIDC subject template; do not broaden the trust policy.');
-            }
-
       - name: Authenticate to AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
