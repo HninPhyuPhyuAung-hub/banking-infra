@@ -1,24 +1,21 @@
 # Deployment and Operations Notes
 
-See [README.md](./README.md) for the problem statement, requirements,
-architecture, and code overview. These notes cover operating the dev
-infrastructure; they do not assert that a deployment is currently healthy.
+Practical setup and troubleshooting for dev. See [README.md](./README.md)
+for the architecture and code overview.
 
 ## 1. Prerequisites
 
-- An AWS account and authorized credentials; configuration currently targets
-  account `439475769687`, region `ap-southeast-1`.
-- Terraform 1.11 or later for local work, AWS CLI, and Git.
-- The existing S3/KMS/OIDC/IAM bootstrap described in
-  [infra/s3/notes.md](./infra/s3/notes.md). Do not recreate existing resources.
-- Two container images published from
+- Authorized AWS credentials for account `439475769687`, region `ap-southeast-1`.
+- Terraform 1.11+, AWS CLI, and Git for local work.
+- Existing S3/KMS/OIDC/IAM bootstrap:
+  [infra/s3/notes.md](./infra/s3/notes.md). Do not recreate it.
+- Frontend/backend images from
   [banking-app](https://github.com/HninPhyuPhyuAung-hub/banking-app).
 - Session Manager plugin only if using ECS Exec.
 
-Commit provider lock files. Never commit `.terraform` directories, state,
-saved plans, credentials, or private keys. Terraform state contains
-database secrets even though runtime injection uses Secrets Manager.
-Remote-state readers can read complete state objects, not only outputs.
+Commit provider lock files, not state, saved plans, credentials, private
+keys, or `.terraform` directories. State contains database secrets;
+restrict access to the complete state objects.
 
 ## 2. GitHub configuration
 
@@ -27,23 +24,14 @@ Remote-state readers can read complete state objects, not only outputs.
 | Repository Actions variables | `AWS_PLAN_ROLE_ARN` | `arn:aws:iam::439475769687:role/github-actions-banking-app-plan` |
 | `infra-dev` environment variables | `AWS_APPLY_ROLE_ARN` | `arn:aws:iam::439475769687:role/github-actions-banking-app-apply` |
 
-Restrict `infra-dev` deployments to `main` and configure required reviewers
-when approval is needed. Protect `main` with PR review. Fork PRs do not run
-credentialed plans. Do not make path-filtered checks mandatory for all
-PRs without handling documentation-only changes: skipped workflows can
-leave required checks pending.
-
-OIDC trust must match actual repository/environment token subjects.
-GitHub may include repository/owner IDs in the subject; use the exact
-observed subject, not a broad wildcard. The environment subject does not
-include the branch, so environment branch restrictions matter.
-
-The plan role reads infrastructure, state, and required secrets and manages
-locks; it cannot write state. The apply role provisions infrastructure and
-writes all three states. Neither role should delete state objects.
-Bootstrap IAM policies are maintained separately; editing documentation
-does not update AWS permissions. The dev provisioning role is not a
-production least-privilege design.
+- Restrict `infra-dev` to `main`; configure reviewers when approval is needed.
+- Protect `main` with PR review. Fork PRs do not run credentialed plans.
+- Path-filtered required checks can remain pending on documentation-only PRs.
+- Match OIDC trust to the exact token subject, including IDs when present;
+  do not broaden it with wildcards. Environment subjects omit the branch.
+- Plan can read state/secrets and manage locks; apply also provisions resources
+  and writes state. Neither should delete state. Bootstrap IAM is maintained
+  separately and the dev apply role is not production least privilege.
 
 ## 3. Deployment order
 
@@ -56,10 +44,8 @@ For a new environment, use **Actions -> Terraform -> Run workflow -> main**:
 4. Select **dev** to deploy the application infrastructure.
 5. Check service stability, target health, logs, API access, and DB access.
 
-PCA and ECR are independently state-managed; dev requires both state
-objects. On bootstrap PRs, dev init/validate runs but the plan is explicitly
-**NOT RUN** if prerequisite state is absent. Rerun after both stacks exist.
-Permission and network failures are not treated as missing state.
+Dev requires PCA and ECR state. Until both exist, bootstrap PRs validate
+dev but report its plan as **NOT RUN**. Rerun after deploying prerequisites.
 
 For subsequent changes:
 
@@ -72,9 +58,8 @@ For subsequent changes:
   [terraform.yml](./.github/workflows/terraform.yml) trigger automatic runs.
   Documentation-only changes do not.
 
-Applying all stacks does not recreate unchanged resources. After a partial
-failure, review a new full plan against the same state; do not delete state
-or manually recreate resources as a recovery shortcut.
+Unchanged resources are not recreated. After a partial failure, review a
+fresh plan against the same state; do not delete state to recover.
 
 ## 4. Application integration
 
@@ -85,20 +70,13 @@ or manually recreate resources as a recovery shortcut.
 | Backend | `ASPNETCORE_URLS=http://+:8080` | Terraform environment |
 | Backend | `ConnectionStrings__DefaultConnection` | Secrets Manager injection |
 
-The database secret holds a single Npgsql connection string, not JSON.
-Do not print it during troubleshooting. The current connection string
-requires TLS but trusts the server certificate; certificate identity
-verification is not enforced by that setting.
-
-Both applications must return a successful response at `/health` over
-their configured HTTP container port. A running container alone does not
-mean its ALB target is healthy. Proxy/HTTPS-redirection configuration must
-also allow health probes to succeed.
-
-Install the private CA root in the frontend image's trust store before
-calling the API. Browsers/operators also need CA trust and private DNS
-access for the configured dashboard hostname. The ALB's AWS hostname does
-not match the private certificate.
+- The database secret is an Npgsql connection string, not JSON. Never print
+  it. It requires TLS but does not enforce server certificate identity.
+- Both containers must serve `/health` on their HTTP port. Redirect/proxy
+  settings must allow probes; a running task is not necessarily healthy.
+- Install the private CA root in the frontend trust store. Dashboard clients
+  also need CA trust and private DNS access. The ALB's AWS hostname does not
+  match the certificate.
 
 An authorized operator can retrieve the public root certificate:
 
@@ -107,46 +85,30 @@ terraform -chdir=infra/pca init
 terraform -chdir=infra/pca output -raw root_ca_certificate_pem > banking-root-ca.crt
 ```
 
-This exports the public certificate, not a private key. Do not disable
-application certificate validation to work around missing trust.
+Do not disable certificate validation to work around missing trust.
 
-Image pushes are separate from Terraform. Updating `latest` does not
-update running tasks; the application pipeline must force a rollout.
-For a unique tag, update the task-definition image reference, for example
-through an `image_tag` change in this repository. Coordinate ownership so
-application deployments and Terraform do not overwrite each other's image
-selection.
+Updating `latest` requires an application rollout; it does not update
+running tasks automatically. For a unique tag, update the task image
+reference (for example `image_tag`). Coordinate application/Terraform
+ownership so deployments do not overwrite each other's image selection.
 
 ## 5. Networking and capacity
 
-| Source | Allowed destination | TCP port |
-|---|---|---|
-| Client | Frontend public ALB | 443 |
-| Frontend ALB | Frontend tasks | 8081 |
-| Frontend tasks | Backend internal ALB over peering | 443 |
-| Backend ALB | Backend tasks | 8080 |
-| Backend tasks | RDS | 5432 |
-| Each task tier | Its private AWS endpoint security group | 443 |
-| Each task tier | Regional S3 prefix list for image layers | 443 |
-
-RDS has no initiated outbound allowance. Security groups are stateful.
-No NAT gateways are configured, and the backend has no Internet Gateway.
-Interface endpoint policies use AWS defaults; IAM and task-only endpoint
-security groups still control access. Unrelated external APIs require
-separately reviewed connectivity.
-
-Each service starts with two tasks, scales from 1 to 4 at a 60% CPU target,
-and ignores Terraform desired-count changes after creation. Deployments
-allow 100% minimum healthy and 200% maximum capacity, so temporary extra
-tasks are expected. Failed health checks can cause repeated replacements.
-PostgreSQL Multi-AZ provides a standby, not a read replica.
+- Traffic follows the [README request flow](./README.md#architecture).
+  Tasks also reach private AWS endpoints/S3 image layers on TCP 443.
+- No NAT gateways; no backend Internet Gateway; no initiated RDS outbound
+  allowance. External APIs need separately reviewed connectivity.
+- Each service starts at 2 tasks and scales from 1 to 4 at 60% CPU.
+  Autoscaling owns desired count after creation.
+- Deployment capacity is 100% minimum healthy / 200% maximum: temporary
+  extra tasks are expected. Failed probes cause repeated replacements.
+- RDS Multi-AZ provides a standby, not a read replica.
 
 ## 6. Logs and health verification
 
-CloudWatch groups `/ecs/banking-api` and `/ecs/banking-dashboard` collect
-container stdout/stderr with 14-day retention. Stream names contain
-`<service>/<container>/<task-id>`. Container files are not automatically
-collected. Do not log tokens, credentials, or customer banking data.
+CloudWatch collects stdout/stderr with 14-day retention, not container
+files. Streams use `<service>/<container>/<task-id>`. Never log secrets or
+customer banking data.
 
 Run these in separate terminals:
 
@@ -155,9 +117,8 @@ aws logs tail /ecs/banking-api --since 10m --follow --region ap-southeast-1
 aws logs tail /ecs/banking-dashboard --since 10m --follow --region ap-southeast-1
 ```
 
-Check ECS service events, stopped task reasons, and ALB target health.
-Failures before the log driver starts may have no application logs.
-Typical symptoms:
+Also check ECS events, stopped task reasons, and ALB target health.
+Failures before logging starts may have no application logs.
 
 | Symptom | Check |
 |---|---|
@@ -175,13 +136,9 @@ curl --cacert banking-root-ca.crt https://api.dev.banking.internal/health
 
 ## 7. ECS Exec
 
-Both services enable ECS Exec, task-role `ssmmessages` channel permissions,
-private `ssmmessages` endpoints, and a container init process. Existing
-tasks cannot be retrofitted: deploy new tasks with Exec enabled. The task
-must remain running and `ExecuteCommandAgent` must report `RUNNING`.
-
-Use an operator identity permitted to run `ecs:ExecuteCommand` on the
-intended cluster/tasks, with the Session Manager plugin installed:
+Exec is enabled for both services. Use a newly deployed, running task with
+`ExecuteCommandAgent=RUNNING`, the Session Manager plugin, and an operator
+identity authorized for `ecs:ExecuteCommand` on the intended cluster/tasks:
 
 ```bash
 aws ecs execute-command \
@@ -201,8 +158,7 @@ secrets. Dedicated session transcript logging is not configured.
 ## 8. Costs and cleanup
 
 Private CA, ALBs, Multi-AZ RDS, Fargate, logs, KMS, and nine interface
-endpoints across two AZs incur ongoing charges. Check current AWS pricing
-and configure budgets; this is not a free-tier-only design.
+endpoints across two AZs incur charges. Set budgets; this is not free-tier only.
 
 There is no automatic destroy workflow. Review cleanup separately:
 
@@ -214,8 +170,6 @@ There is no automatic destroy workflow. Review cleanup separately:
 3. Preserve state and backups; remove the bootstrap bucket last, only
    when nothing relies on it.
 
-Target groups use `ip` with fixed names `frontend-tg` and `backend-tg`.
-For a replacement that needs a new target group, choose a new name:
-`create_before_destroy` cannot create two groups with the same name.
-Do not delete groups attached to listeners/services manually. Check
-regional PostgreSQL version availability before changing engine versions.
+For target-group replacements, use a new name: `create_before_destroy`
+cannot create duplicate `frontend-tg`/`backend-tg` names. Do not manually
+delete attached groups. Check regional availability before PostgreSQL upgrades.
