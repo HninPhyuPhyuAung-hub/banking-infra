@@ -19,6 +19,44 @@ export PLAN_ROLE_NAME="github-actions-banking-app-plan"
 export APPLY_ROLE_NAME="github-actions-banking-app-apply"
 ```
 
+## Application repository image-push role
+
+A separate role has been created for `HninPhyuPhyuAung-hub/banking-app`:
+
+```text
+arn:aws:iam::439475769687:role/github-actions-banking-app-ecr-push
+```
+
+It reuses the account's GitHub OIDC provider. Its trust policy requires
+audience `sts.amazonaws.com` and the exact subject
+`repo:HninPhyuPhyuAung-hub/banking-app:ref:refs/heads/main`.
+PRs, other branches and environment-based jobs cannot assume it.
+If the application workflow later uses a GitHub environment, deliberately
+update the trust subject and protect that environment before using it.
+
+The inline policy `banking-ecr-push` permits `ecr:GetAuthorizationToken`
+on `*` (required for login), and only these actions on `banking-api` and
+`banking-dashboard` repository ARNs in this account/region:
+`ecr:BatchCheckLayerAvailability`, `ecr:InitiateLayerUpload`,
+`ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:PutImage`.
+It grants no ECS deployment, Terraform state access, repository creation
+or deletion. This role is bootstrap-managed, not owned by dev Terraform.
+
+For the application repository's existing CI/CD workflow, configure:
+
+| Setting | Location | Value |
+|---|---|---|
+| `AWS_ROLE_ARN` | Actions repository secret (existing workflow uses `secrets`) | Role ARN above |
+| `AWS_REGION` | Actions repository variable | `ap-southeast-1` |
+| `ECR_API_REPOSITORY` | Actions repository variable | `banking-api` |
+| `ECR_WEB_REPOSITORY` | Actions repository variable | `banking-dashboard` |
+
+Repository values are names only, not full URLs. Do not store AWS access
+keys. Protect application `main` with review. IAM readback and policy
+simulation verified the role; an actual app workflow run must still verify
+OIDC authentication and image pushes. Do not enable its ECS deploy steps
+with this push-only role.
+
 ## 1. Create the KMS key used to encrypt the state bucket
 
 ```bash
