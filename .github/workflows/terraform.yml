@@ -118,7 +118,7 @@ jobs:
             core.setSecret(token);
             const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
             core.info(JSON.stringify({ issuer: claims.iss, audience: claims.aud, subject: claims.sub }));
-            const expectedSubject = 'repo:HninPhyuPhyuAung-hub/banking-infra:environment:infra-dev';
+            const expectedSubject = 'repo:HninPhyuPhyuAung-hub@58066359/banking-infra@1410181109:environment:infra-dev';
             if (claims.iss !== 'https://token.actions.githubusercontent.com' ||
                 claims.aud !== 'sts.amazonaws.com' ||
                 claims.sub !== expectedSubject) {

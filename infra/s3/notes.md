@@ -206,7 +206,7 @@ cat > "$POLICY_DIR/apply-trust.json" <<EOF
     "Condition": {
       "StringEquals": {
         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-        "token.actions.githubusercontent.com:sub": "repo:${GITHUB_ORG}/${GITHUB_REPO}:environment:infra-dev"
+        "token.actions.githubusercontent.com:sub": "repo:HninPhyuPhyuAung-hub@58066359/banking-infra@1410181109:environment:infra-dev"
       }
     }
   }]
@@ -220,6 +220,13 @@ aws iam create-role \
 ```
 
 ## 10. Different permissions for plan and apply
+
+The apply subject above is the exact ID-qualified subject observed in this
+repository's GitHub OIDC token. Do not replace it with the name-only format
+or a wildcard. For a different repository, obtain its actual OIDC subject
+before configuring trust. The PR plan role and application push role may
+also need their own observed ID-qualified subjects; their subjects have
+not been verified by this deploy token.
 
 The plan role is read-only for AWS infrastructure, but **not completely
 read-only for S3/KMS**: Terraform must write/delete each stack's `.tflock`
