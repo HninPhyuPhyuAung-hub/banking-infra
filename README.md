@@ -14,7 +14,7 @@ harder to maintain.
 
 This assignment uses infrastructure as code to provide a controlled frontend
 entry point, private application and database tiers, encrypted storage,
-HTTPS listeners, centralized logs, and reviewed GitHub-based changes.
+HTTPS listeners, centralized logs.
 It is a development reference architecture, not a production banking
 compliance certification.
 
@@ -28,7 +28,7 @@ compliance certification.
 | Route frontend requests to the API | Public frontend ALB and internal backend ALB |
 | Provide HTTPS | ACM certificates issued by a Terraform-managed AWS Private CA |
 | Store relational data with availability protection | PostgreSQL RDS with Multi-AZ primary/standby deployment |
-| Protect credentials and stored data | Secrets Manager, KMS-encrypted RDS/ECR and encrypted remote state |
+| Protect database credentials and encrypt stored data | Secrets Manager for credentials; KMS encryption for RDS, ECR, and S3 Terraform state |
 | Scale the application | CPU target tracking at 60%, independently scaling each service from 1 to 4 tasks |
 | Support diagnostics | CloudWatch task logs, Container Insights, and ECS Exec |
 | Make changes reproducible | Reusable Terraform modules, remote state locking, and GitHub Actions with OIDC |
