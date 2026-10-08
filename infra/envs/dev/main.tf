@@ -286,8 +286,8 @@ module "frontend_ecs_service" {
   max_capacity    = 4
 
   environment = {
-    ASPNETCORE_URLS = "http://+:${var.frontend_container_port}"
-    ApiBaseUrl      = "https://${aws_route53_record.api.fqdn}"
+    ASPNETCORE_URLS     = "http://+:${var.frontend_container_port}"
+    BankingApi__BaseUrl = "https://${aws_route53_record.api.fqdn}"
   }
 
   alb_security_group_id = module.frontend_alb.security_group_id
