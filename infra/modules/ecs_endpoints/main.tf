@@ -19,7 +19,7 @@ resource "aws_security_group" "endpoints" {
 
 resource "aws_vpc_endpoint" "interface" {
   for_each = toset(concat(
-    ["ecr.api", "ecr.dkr", "logs"],
+    ["ecr.api", "ecr.dkr", "logs", "ssmmessages"],
     var.enable_secrets_manager ? ["secretsmanager"] : [],
   ))
 

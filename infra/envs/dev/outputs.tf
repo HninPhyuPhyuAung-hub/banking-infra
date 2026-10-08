@@ -63,3 +63,13 @@ output "backend_ecs_service_name" {
 output "frontend_ecs_service_name" {
   value = module.frontend_ecs_service.service_name
 }
+
+output "backend_ecs_log_group_name" {
+  description = "CloudWatch Logs group for backend container stdout/stderr"
+  value       = module.backend_ecs_service.log_group_name
+}
+
+output "frontend_ecs_log_group_name" {
+  description = "CloudWatch Logs group for frontend container stdout/stderr"
+  value       = module.frontend_ecs_service.log_group_name
+}

@@ -100,6 +100,24 @@ resource "aws_iam_role" "task" {
   tags               = var.tags
 }
 
+resource "aws_iam_role_policy" "task_exec" {
+  name = "${var.name}-task-exec"
+  role = aws_iam_role.task.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ssmmessages:CreateControlChannel",
+        "ssmmessages:CreateDataChannel",
+        "ssmmessages:OpenControlChannel",
+        "ssmmessages:OpenDataChannel",
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
 resource "aws_iam_role_policy" "task_secrets" {
   count = length(var.secrets) > 0 ? 1 : 0
   name  = "${var.name}-task-secrets"
@@ -131,6 +149,9 @@ resource "aws_ecs_task_definition" "this" {
       name      = var.name
       image     = var.container_image
       essential = true
+      linuxParameters = {
+        initProcessEnabled = true
+      }
       portMappings = [
         {
           containerPort = var.container_port
@@ -158,11 +179,14 @@ resource "aws_ecs_task_definition" "this" {
 }
 
 resource "aws_ecs_service" "this" {
-  name            = var.name
-  cluster         = var.cluster_id
-  task_definition = aws_ecs_task_definition.this.arn
-  desired_count   = var.desired_count
-  launch_type     = "FARGATE"
+  name                   = var.name
+  cluster                = var.cluster_id
+  task_definition        = aws_ecs_task_definition.this.arn
+  desired_count          = var.desired_count
+  launch_type            = "FARGATE"
+  enable_execute_command = true
+
+  depends_on = [aws_iam_role_policy.task_exec]
 
   network_configuration {
     subnets         = var.subnet_ids

@@ -173,10 +173,11 @@ also protects against overlapping PR plans.
 | Both task tiers | Regional S3 prefix list for ECR image layers | 443 |
 | RDS | No initiated outbound connections | None |
 
-Fargate exceptions: ECR API/Docker and CloudWatch Logs interface endpoints
+Fargate exceptions: ECR API/Docker, CloudWatch Logs and ECS Exec
+(`ssmmessages`) interface endpoints
 in both VPCs, Secrets Manager in backend, and S3 gateway endpoints whose
 policies permit only reads of the regional ECR image-layer bucket.
-Seven interface endpoints across two AZs incur hourly/data charges.
+Nine interface endpoints across two AZs incur hourly/data charges.
 Interface endpoint policies use AWS defaults; their security groups accept
 only the corresponding task tier. IAM still controls AWS API operations.
 
@@ -200,6 +201,69 @@ For updates to an existing mutable image tag, the application pipeline
 must force an ECS deployment after pushing. For immutable tags, update
 `image_tag` via a PR and run the dev deployment. Terraform does not detect
 image-content changes behind an unchanged tag.
+
+## 7. ECS task logs
+
+Both task definitions already use the `awslogs` driver to send container
+stdout/stderr to CloudWatch Logs in `ap-southeast-1`:
+
+| Service | Log group | Retention |
+|---|---|---|
+| Backend API | `/ecs/banking-api` | 14 days |
+| Frontend dashboard | `/ecs/banking-dashboard` | 14 days |
+
+Each task has its own stream named `<service>/<container>/<task-id>`.
+The execution role grants log delivery permissions, and private Logs
+endpoints allow delivery without NAT or internet access. Application logs
+must be written to stdout/stderr; files inside containers are not collected.
+Do not log passwords, connection strings, tokens, or customer banking data.
+
+Open **CloudWatch -> Logs -> Log groups** and choose the service's group,
+or follow recent logs with AWS CLI credentials that permit log reads:
+
+```bash
+aws logs tail /ecs/banking-api --since 10m --follow --region ap-southeast-1
+aws logs tail /ecs/banking-dashboard --since 10m --follow --region ap-southeast-1
+```
+
+Run each follow command in a separate terminal. Dev exports
+`backend_ecs_log_group_name` and `frontend_ecs_log_group_name` after apply.
+Image-pull or startup failures before logging initializes may have no
+application logs; inspect ECS service events and stopped task reasons too.
+
+## 8. ECS Exec
+
+Both services enable ECS Exec. Task roles grant the four required
+`ssmmessages` channel actions (these actions require resource `*`).
+Each VPC has a private `ssmmessages` endpoint using the existing
+task-only HTTPS security-group rules; no internet access is added.
+Containers enable the init process to reap ECS Exec agent child processes.
+
+Apply the dev stack to deploy this configuration. The task-definition
+change rolls out new tasks; existing tasks cannot be retrofitted with ECS
+Exec. A task must stay running and its `ExecuteCommandAgent` must report
+`RUNNING` before a session can connect.
+
+Install the AWS Session Manager plugin on your workstation and use an
+operator identity authorized for `ecs:ExecuteCommand` on the intended
+cluster/tasks. The CI image-push role is not an operator role. To open a
+backend shell, replace `TASK_ID` with a running task's ID:
+
+```bash
+aws ecs execute-command \
+  --cluster backend-cluster \
+  --task TASK_ID \
+  --container banking-api \
+  --interactive \
+  --command "/bin/sh" \
+  --region ap-southeast-1
+```
+
+For frontend use cluster `frontend-cluster` and container
+`banking-dashboard`. The image must contain the requested shell. ECS Exec
+runs as root, so restrict operator access and avoid printing secrets.
+Application stdout/stderr logging remains enabled; this change does not
+configure dedicated ECS Exec session transcript logging.
 
 ## Teardown and existing-state migration
 
