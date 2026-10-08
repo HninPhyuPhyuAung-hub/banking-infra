@@ -1,0 +1,25 @@
+# ---- Terraform ----
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.tfstate.lock.info
+
+# Keep the dependency lock file committed (ensures consistent provider
+# versions across local machines and CI) — do NOT ignore it:
+# !.terraform.lock.hcl
+
+# ---- OS / editor ----
+.DS_Store
+*.swp
+
+# ---- .NET (for future backend/frontend projects) ----
+bin/
+obj/
+*.user

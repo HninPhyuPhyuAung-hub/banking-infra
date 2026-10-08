@@ -1,0 +1,81 @@
+name: Terraform
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform.yml"
+  workflow_dispatch:
+    inputs:
+      stack:
+        description: "Stack to deploy (all runs PCA, ECR, then dev)"
+        required: true
+        default: dev
+        type: choice
+        options: [pca, ecr, dev, all]
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-1
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+jobs:
+  plan:
+    name: Plan (${{ matrix.stack }})
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: [pca, ecr, dev]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.11.0"
+          terraform_wrapper: false
+      - name: Check formatting
+        run: terraform -chdir=infra fmt -check -recursive
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Plan stack
+        env:
+          STACK: ${{ matrix.stack }}
+        run: bash infra/terraform-workflow.sh plan "$STACK"
+
+  deploy:
+    name: Deploy
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: infra-dev
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: terraform-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.11.0"
+          terraform_wrapper: false
+      - name: Check formatting
+        run: terraform -chdir=infra fmt -check -recursive
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Deploy selected stack
+        env:
+          STACK: ${{ inputs.stack }}
+        run: bash infra/terraform-workflow.sh apply "$STACK"
