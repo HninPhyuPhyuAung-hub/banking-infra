@@ -92,11 +92,9 @@ resource "aws_secretsmanager_secret" "db_credentials" {
 
 resource "aws_secretsmanager_secret_version" "db_credentials" {
   secret_id = aws_secretsmanager_secret.db_credentials.id
-  secret_string = jsonencode({
-    username = var.master_username
-    password = random_password.master.result
-    host     = aws_db_instance.this.address
-    port     = 5432
-    dbname   = var.db_name
-  })
+  # Plain ADO.NET/Npgsql connection string, not JSON: the API task definition
+  # injects this value directly as ConnectionStrings__DefaultConnection, and
+  # .NET configuration expects a single connection-string value there, not a
+  # JSON object.
+  secret_string = "Host=${aws_db_instance.this.address};Port=5432;Database=${var.db_name};Username=${var.master_username};Password=${random_password.master.result};SSL Mode=Require;Trust Server Certificate=true"
 }
