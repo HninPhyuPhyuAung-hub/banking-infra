@@ -16,6 +16,12 @@ Internet -> public frontend ALB -> private frontend ECS tasks
 The frontend VPC is `10.0.0.0/16`; the backend VPC is `192.168.0.0/16`.
 They use same-region VPC peering. Both task tiers have no public IP and
 no NAT gateway. The frontend ALB is the only public application entry point.
+The backend VPC has no public subnets or Internet Gateway. Its AWS-service
+access uses private endpoints; only the frontend VPC retains an Internet
+Gateway and public subnets for its public ALB.
+Only the application private-subnet route tables participate in peering.
+Database subnet route tables retain local VPC routing only: backend tasks
+reach RDS locally, and RDS does not need a route to the frontend VPC.
 
 | Configuration | Remote state key | Resources |
 |---|---|---|
@@ -196,6 +202,30 @@ must force an ECS deployment after pushing. For immutable tags, update
 image-content changes behind an unchanged tag.
 
 ## Teardown and existing-state migration
+
+Fargate uses `awsvpc` networking, so both ALB target groups use target
+type `ip`. Target groups are named `frontend-tg` and `backend-tg`.
+Renaming the previous generated-name groups requires replacement;
+`create_before_destroy` creates the newly named groups before switching
+listeners and ECS services. ECS creation waits for the listener association.
+For future replacement changes that retain the same fixed name, choose a
+new target-group name first: AWS cannot create two groups with the same
+name, and `create_before_destroy` cannot bypass that uniqueness constraint.
+Do not manually delete groups attached to listeners or ECS services.
+
+The PostgreSQL default is `15.19`, verified available in `ap-southeast-1`
+for `db.t3.micro` with Multi-AZ and gp3. Verify regional version availability
+again before future deployments; older minor versions may be retired.
+After a failed partial apply, rerun a full plan/apply against the same
+remote state. Do not delete state or recreate resources by hand.
+
+Peering routes use stable list-index keys so a first plan can include
+route tables whose AWS IDs are not known yet. Keep route-table input order
+stable. If migrating an already-applied older configuration keyed by
+route-table IDs, move each existing route's state address to its matching
+index before applying; otherwise Terraform will plan route replacement.
+Requester routes target the backend CIDR, and accepter routes target the
+frontend CIDR.
 
 There is deliberately no one-click destroy workflow. Review teardown
 separately: remove dev first (disable RDS deletion protection intentionally

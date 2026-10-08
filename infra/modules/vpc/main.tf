@@ -110,8 +110,8 @@ resource "aws_route_table_association" "private" {
 }
 
 # ---------------------------------------------------------------------------
-# Database subnets (data tier) — no internet route, just local + peering
-# routes added by the root module once the peering connection exists
+# Database subnets (data tier) — local VPC routing only, no internet or
+# peering route to the frontend VPC
 # ---------------------------------------------------------------------------
 resource "aws_subnet" "database" {
   count             = length(var.database_subnet_cidrs)

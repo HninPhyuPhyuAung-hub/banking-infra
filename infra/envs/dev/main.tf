@@ -47,7 +47,7 @@ module "backend_vpc" {
   name                  = "backend"
   cidr_block            = var.backend_vpc_cidr
   azs                   = var.azs
-  public_subnet_cidrs   = var.backend_public_subnet_cidrs
+  public_subnet_cidrs   = []
   private_subnet_cidrs  = var.backend_private_subnet_cidrs
   database_subnet_cidrs = var.backend_database_subnet_cidrs
   enable_nat_gateway    = false
@@ -67,10 +67,7 @@ module "vpc_peering" {
   accepter_cidr_block  = var.frontend_vpc_cidr
 
   requester_route_table_ids = module.frontend_vpc.private_route_table_ids
-  accepter_route_table_ids = concat(
-    module.backend_vpc.private_route_table_ids,
-    module.backend_vpc.database_route_table_ids,
-  )
+  accepter_route_table_ids  = module.backend_vpc.private_route_table_ids
 
   tags = { Name = "frontend-backend-peering" }
 }

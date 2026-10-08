@@ -12,7 +12,7 @@ variable "db_subnet_ids" {
 
 variable "engine_version" {
   type    = string
-  default = "15.7"
+  default = "15.19"
 }
 
 variable "instance_class" {

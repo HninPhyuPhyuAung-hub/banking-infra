@@ -17,13 +17,13 @@ variable "accepter_cidr_block" {
 }
 
 variable "requester_route_table_ids" {
-  description = "Route tables on the requester side that need a route to the accepter VPC"
+  description = "Ordered route tables on the requester side; keep order stable because route instance keys use list indices"
   type        = list(string)
   default     = []
 }
 
 variable "accepter_route_table_ids" {
-  description = "Route tables on the accepter side that need a route to the requester VPC"
+  description = "Ordered route tables on the accepter side; keep order stable because route instance keys use list indices"
   type        = list(string)
   default     = []
 }

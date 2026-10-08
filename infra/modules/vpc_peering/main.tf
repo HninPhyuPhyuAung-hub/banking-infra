@@ -33,17 +33,17 @@ resource "aws_vpc_peering_connection_options" "this" {
 # Routes on the requester side (e.g. frontend private subnets) pointing at
 # the accepter VPC's CIDR (backend).
 resource "aws_route" "requester_to_accepter" {
-  for_each                  = toset(var.requester_route_table_ids)
+  for_each                  = { for index, id in var.requester_route_table_ids : tostring(index) => id }
   route_table_id            = each.value
-  destination_cidr_block    = var.accepter_cidr_block
+  destination_cidr_block    = var.requester_cidr_block
   vpc_peering_connection_id = aws_vpc_peering_connection.this.id
 }
 
 # Routes on the accepter side (e.g. backend subnets) pointing back at the
 # requester VPC's CIDR (frontend).
 resource "aws_route" "accepter_to_requester" {
-  for_each                  = toset(var.accepter_route_table_ids)
+  for_each                  = { for index, id in var.accepter_route_table_ids : tostring(index) => id }
   route_table_id            = each.value
-  destination_cidr_block    = var.requester_cidr_block
+  destination_cidr_block    = var.accepter_cidr_block
   vpc_peering_connection_id = aws_vpc_peering_connection.this.id
 }

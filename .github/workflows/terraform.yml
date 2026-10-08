@@ -1,19 +1,26 @@
 name: Terraform
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform.yml"
+
   pull_request:
     branches: [main]
     paths:
       - "infra/**"
       - ".github/workflows/terraform.yml"
+
   workflow_dispatch:
     inputs:
       stack:
         description: "Stack to deploy (all runs PCA, ECR, then dev)"
         required: true
-        default: dev
+        default: all
         type: choice
-        options: [pca, ecr, dev, all]
+        options: [all, pca, ecr, dev]
 
 permissions:
   contents: read
@@ -24,58 +31,106 @@ env:
   TF_INPUT: "false"
 
 jobs:
+  # Pull requests: plan only, never apply.
   plan:
     name: Plan (${{ matrix.stack }})
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+
     permissions:
       contents: read
       id-token: write
+
     strategy:
       fail-fast: false
       matrix:
         stack: [pca, ecr, dev]
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.11.0"
           terraform_wrapper: false
+
       - name: Check formatting
         run: terraform -chdir=infra fmt -check -recursive
-      - uses: aws-actions/configure-aws-credentials@v4
+
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+
       - name: Plan stack
         env:
           STACK: ${{ matrix.stack }}
         run: bash infra/terraform-workflow.sh plan "$STACK"
 
+  # Main pushes: deploy all stacks in order.
+  # Manual runs: deploy all or one selected stack.
   deploy:
-    name: Deploy
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    name: Deploy Terraform
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' ||
+       github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: infra-dev
+
     permissions:
       contents: read
       id-token: write
+
     concurrency:
       group: terraform-deploy
       cancel-in-progress: false
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.11.0"
           terraform_wrapper: false
+
       - name: Check formatting
         run: terraform -chdir=infra fmt -check -recursive
-      - uses: aws-actions/configure-aws-credentials@v4
+
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Deploy selected stack
+
+      - name: Deploy stacks in dependency order
+        shell: bash
         env:
-          STACK: ${{ inputs.stack }}
-        run: bash infra/terraform-workflow.sh apply "$STACK"
+          STACK: ${{ inputs.stack || 'all' }}
+        run: |
+          set -euo pipefail
+
+          case "$STACK" in
+            all)
+              stacks=(pca ecr dev)
+              ;;
+            pca|ecr|dev)
+              stacks=("$STACK")
+              ;;
+            *)
+              echo "Unsupported stack: $STACK"
+              exit 1
+              ;;
+          esac
+
+          for stack in "${stacks[@]}"; do
+            echo "Deploying stack: $stack"
+            bash infra/terraform-workflow.sh apply "$stack"
+          done

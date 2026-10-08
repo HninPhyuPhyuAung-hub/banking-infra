@@ -34,12 +34,6 @@ variable "backend_vpc_cidr" {
   default = "192.168.0.0/16"
 }
 
-variable "backend_public_subnet_cidrs" {
-  description = "Only used for NAT Gateways so the API tier can reach the internet (e.g. pulling images, OS patches)"
-  type        = list(string)
-  default     = ["192.168.1.0/24", "192.168.5.0/24"]
-}
-
 variable "backend_private_subnet_cidrs" {
   type    = list(string)
   default = ["192.168.2.0/24", "192.168.6.0/24"]

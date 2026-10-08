@@ -52,10 +52,11 @@ resource "aws_lb" "this" {
 }
 
 resource "aws_lb_target_group" "this" {
-  name     = "${var.name}-tg"
-  port     = var.target_port
-  protocol = "HTTP"
-  vpc_id   = var.vpc_id
+  name        = "${var.name}-tg"
+  port        = var.target_port
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = var.vpc_id
 
   health_check {
     path                = var.health_check_path
@@ -68,6 +69,10 @@ resource "aws_lb_target_group" "this" {
   }
 
   tags = merge(var.tags, { Name = "${var.name}-tg" })
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_lb_listener" "this" {
