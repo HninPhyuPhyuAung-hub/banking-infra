@@ -4,13 +4,23 @@ on:
   push:
     branches: [main]
     paths:
-      - "infra/**"
+      - "infra/**/*.tf"
+      - "infra/**/*.tf.json"
+      - "infra/**/*.tfvars"
+      - "infra/**/*.tfvars.json"
+      - "infra/**/.terraform.lock.hcl"
+      - "infra/terraform-workflow.sh"
       - ".github/workflows/terraform.yml"
 
   pull_request:
     branches: [main]
     paths:
-      - "infra/**"
+      - "infra/**/*.tf"
+      - "infra/**/*.tf.json"
+      - "infra/**/*.tfvars"
+      - "infra/**/*.tfvars.json"
+      - "infra/**/.terraform.lock.hcl"
+      - "infra/terraform-workflow.sh"
       - ".github/workflows/terraform.yml"
 
   workflow_dispatch:

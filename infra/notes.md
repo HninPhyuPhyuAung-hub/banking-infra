@@ -141,12 +141,22 @@ retrieval into the future image pipeline with explicitly authorized access.
 
 ## 5. Deploy dev
 
-Open a PR to `main` changing infrastructure. All three stack plans run
-automatically, with plans in job logs and results in the run summary.
-Review the plans and merge. **Merging alone does not deploy.**
+Open a PR to `main` changing Terraform configuration. All three stack plans
+run automatically, with plans in job logs and results in the run summary.
+Review the plans and merge. Matching pushes to `main` deploy all three stacks
+in order, subject to the protected environment's approval rules.
 
-Then **Actions -> Terraform -> Run workflow -> main -> dev**, and approve
-the protected environment deployment.
+Push and PR triggers match only `infra/**/*.tf`, `infra/**/*.tf.json`,
+`infra/**/*.tfvars`, `infra/**/*.tfvars.json`,
+`infra/**/.terraform.lock.hcl`, `infra/terraform-workflow.sh`, and
+`.github/workflows/terraform.yml`. README/notes-only changes do not trigger
+the workflow; mixed documentation and matching code changes still do.
+Avoid requiring a path-filtered workflow as a mandatory check for
+documentation-only PRs: skipped workflows can leave required checks pending.
+
+Manual runs remain available regardless of changed paths:
+**Actions -> Terraform -> Run workflow -> main -> dev**, and approve
+the protected environment deployment if required.
 
 Dev creates networking, private endpoints, DNS, both ALB certificates,
 ALBs, ECS and RDS, using PCA/ECR remote-state outputs. Both ECS services
