@@ -254,7 +254,7 @@ module "backend_ecs_service" {
     ASPNETCORE_URLS = "http://+:${var.backend_container_port}"
   }
   secrets = {
-    DB_CONNECTION = module.rds.secret_arn
+    ConnectionStrings__DefaultConnection = module.rds.secret_arn
   }
 
   alb_security_group_id = module.backend_alb.security_group_id
