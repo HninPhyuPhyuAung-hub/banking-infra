@@ -80,7 +80,17 @@ jobs:
       - name: Plan stack
         env:
           STACK: ${{ matrix.stack }}
+          TF_ARTIFACTS_DIR: ${{ runner.temp }}/tf-artifacts
         run: bash infra/terraform-workflow.sh plan "$STACK"
+
+      - name: Upload plan artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ matrix.stack }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/tf-artifacts/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # Main pushes: deploy all stacks in order.
   # Manual runs: deploy all or one selected stack.
@@ -124,6 +134,7 @@ jobs:
         shell: bash
         env:
           STACK: ${{ inputs.stack || 'all' }}
+          TF_ARTIFACTS_DIR: ${{ runner.temp }}/tf-artifacts
         run: |
           set -euo pipefail
 
@@ -144,3 +155,12 @@ jobs:
             echo "Deploying stack: $stack"
             bash infra/terraform-workflow.sh apply "$stack"
           done
+
+      - name: Upload terraform outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/tf-artifacts/
+          retention-days: 90
+          if-no-files-found: ignore

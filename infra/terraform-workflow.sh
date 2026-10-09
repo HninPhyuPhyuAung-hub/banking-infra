@@ -4,6 +4,14 @@ set -euo pipefail
 action="${1:?Expected plan or apply}"
 stack="${2:?Expected pca, ecr, dev or all}"
 
+# Optional: when set, the rendered plan (and, on apply, the resulting
+# outputs) are written here per-stack so the workflow can upload them as
+# build artifacts. Left unset, nothing extra is written.
+artifacts_dir="${TF_ARTIFACTS_DIR:-}"
+if [[ -n "$artifacts_dir" ]]; then
+  mkdir -p "$artifacts_dir"
+fi
+
 case "$action" in
   plan|apply) ;;
   *) echo "::error::Unknown action: $action"; exit 1 ;;
@@ -57,8 +65,18 @@ for current in "${stacks[@]}"; do
   terraform -chdir="$directory" plan -input=false -lock-timeout=5m \
     -no-color -out="$plan_file"
 
+  if [[ -n "$artifacts_dir" ]]; then
+    terraform -chdir="$directory" show -no-color "$plan_file" \
+      > "$artifacts_dir/$current-plan.txt"
+  fi
+
   if [[ "$action" == "apply" ]]; then
     terraform -chdir="$directory" apply -input=false -lock-timeout=5m "$plan_file"
+
+    if [[ -n "$artifacts_dir" ]]; then
+      terraform -chdir="$directory" output -json \
+        > "$artifacts_dir/$current-outputs.json"
+    fi
   fi
 
   printf '### %s: %s completed\n\nSee the job logs for the Terraform plan.\n' \

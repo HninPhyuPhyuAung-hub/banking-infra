@@ -115,6 +115,12 @@ plan for deployments. Before prerequisite state exists, a PR dev plan is
 explicitly reported as **NOT RUN**; deployment fails instead of pretending
 to succeed. Concurrent deployment jobs are serialized.
 
+Each run also uploads build artifacts: PR plan jobs attach a rendered
+`terraform show` of the plan per stack (`terraform-plan-<stack>-<attempt>`,
+7-day retention); deploy jobs attach `terraform output -json` per applied
+stack (`terraform-outputs-<attempt>`, 90-day retention) so DNS names, ECR
+URLs, and similar outputs don't require digging through job logs.
+
 Terraform creates ECR repositories but does not build images. ECR image
 pushes do not trigger this workflow or automatically replace running ECS
 tasks; application delivery belongs to the application repository.
