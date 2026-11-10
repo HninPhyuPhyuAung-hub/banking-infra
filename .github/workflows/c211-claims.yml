@@ -1,0 +1,17 @@
+name: pr-oidc-claims
+on:
+  pull_request:
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  claims:
+    runs-on: ubuntu-latest
+    steps:
+      - name: mint token and print claims
+        run: |
+          echo "REPO=$GITHUB_REPOSITORY EVENT=$GITHUB_EVENT_NAME REF=$GITHUB_REF"
+          if [ -z "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then echo "NO_OIDC_URL"; exit 0; fi
+          TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | python3 -c "import sys,json;print(json.load(sys.stdin)['value'])")
+          echo "TOKEN_LEN=${#TOKEN}"
+          python3 -c "import sys,base64,json;t=sys.argv[1];p=t.split('.')[1];p+='='*(-len(p)%4);c=json.loads(base64.urlsafe_b64decode(p));print('CLAIMS='+json.dumps({k:c.get(k) for k in ['sub','repository','repository_id','repository_owner','repository_owner_id','ref','event_name','job_workflow_ref','workflow_ref','job_workflow_sha','sha','environment','actor_id','ref_type']}))" "$TOKEN"
